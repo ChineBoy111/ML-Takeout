@@ -81,4 +81,14 @@ public class OrderController {
         log.info("再来一单，订单id{}",id);
         return orderService.repetition(id);
     }
+    /**
+     * 催单
+     */
+    @GetMapping("/reminder/{id}")
+    @ApiOperation("催单接口")
+    public Result reminder(@PathVariable Long id){
+        log.info("催单，订单id{}",id);
+        orderService.reminder(id);
+        return Result.success();
+    }
 }

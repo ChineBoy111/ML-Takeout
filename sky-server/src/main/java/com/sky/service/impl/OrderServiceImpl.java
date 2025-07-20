@@ -1,5 +1,6 @@
 package com.sky.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
@@ -22,6 +23,7 @@ import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
 
+import com.sky.websocket.WebSocketServer;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -29,9 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -46,6 +46,9 @@ public class OrderServiceImpl implements OrderService {
     private ShoppingCartMapper shoppingCartMapper;
     @Autowired
     private ShoppingCartServiceImpl shoppingCartService;
+    @Autowired
+    private WebSocketServer webSocketServer;
+
     @Transactional
     public Result<OrderSubmitVO> submit(OrdersSubmitDTO ordersSubmitDTO) {
         //处理各种业务异常(地址簿为空、购物车数据为空)
@@ -152,7 +155,8 @@ public class OrderServiceImpl implements OrderService {
                 OrderVO orderVO = new OrderVO();
                 BeanUtils.copyProperties(orders, orderVO);
                 String orderDishes = getOrderDishesStr(orders);
-
+                //封装订单地址
+                orderVO.setAddress(getAddrass(orderVO.getAddressBookId()));
                 // 将订单菜品信息封装到orderVO中，并添加到orderVOList
                 orderVO.setOrderDishes(orderDishes);
                 orderVOList.add(orderVO);
@@ -385,6 +389,23 @@ public class OrderServiceImpl implements OrderService {
         return Result.success();
     }
 
+    @Override
+    public void reminder(Long id) {
+        Orders orderById = orderMapper.getOrderById(id);
+        //检验订单是否存在
+        if(orderById == null){
+            throw new OrderBusinessException(MessageConstant.ORDER_NOT_FOUND);
+        }
+        //通过websocket向客户端发送消息
+        Map map = new HashMap();
+        map.put("type", 2);//1来单提醒 2 催单
+        map.put("orderId", orderById.getId());
+        map.put("content", "订单号:"+ orderById.getNumber());
+        String json = JSON.toJSONString(map);
+        System.out.println( "向客户端发送消息:"+json);
+        webSocketServer.sendToAllClient(json);
+    }
+
     /**
      * 支付成功，修改订单状态
      *
@@ -409,5 +430,15 @@ public class OrderServiceImpl implements OrderService {
                 .checkoutTime(LocalDateTime.now())
                 .tablewareNumber(ordersDB.getTablewareNumber()).packAmount(ordersDB.getPackAmount()).build();
         orderMapper.update(orders);
+
+        //通过websocket向客户端发送消息
+        Map map = new HashMap();
+        map.put("type", 1);//1来单提醒 2 催单
+        map.put("orderId", ordersDB.getId());
+        map.put("content", "订单号:"+ outTradeNo);
+        String json = JSON.toJSONString(map);
+        System.out.println( "向客户端发送消息:"+json);
+        webSocketServer.sendToAllClient(json);
+
     }
 }

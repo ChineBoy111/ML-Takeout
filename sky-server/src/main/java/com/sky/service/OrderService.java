@@ -35,4 +35,6 @@ public interface OrderService {
     Result userCancel(Long id);
 
     Result repetition(Long id);
+
+    void reminder(Long id);
 }
